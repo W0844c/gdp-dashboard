@@ -1,151 +1,68 @@
-import streamlit as st
+iimport streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import plotly.express as px
+from datetime import datetime
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# ----------------------页面配置----------------------
+st.set_page_config(page_title="新发地土豆价格分析", layout="wide")
+st.title("🥔 北京新发地土豆价格动态分析看板")
+st.subheader("数据来源：新发地农产品价格")
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
+# ----------------------构造数据（和你截图一致）----------------------
+data = [
+    {"日期":"2026-10-12","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":1.03,"最高价":1.2},
+    {"日期":"2026-10-13","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-13","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":1.03,"最高价":1.2},
+    {"日期":"2026-10-14","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-14","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":0.98,"最高价":1.1},
+    {"日期":"2026-10-15","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-15","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":0.98,"最高价":1.1},
+    {"日期":"2026-10-16","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-16","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":0.98,"最高价":1.1},
+    {"日期":"2026-10-17","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-17","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":0.98,"最高价":1.1},
+    {"日期":"2026-10-18","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-18","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":0.98,"最高价":1.1},
+    {"日期":"2026-10-19","品名":"土豆","产地":"冀","最低价":0.8,"平均价":0.9,"最高价":1.0},
+    {"日期":"2026-10-19","品名":"土豆","产地":"黄金薯","最低价":0.85,"平均价":0.98,"最高价":1.1},
 ]
 
-st.header('GDP over time', divider='gray')
+df = pd.DataFrame(data)
+df["日期"] = pd.to_datetime(df["日期"])
 
-''
+# ----------------------交互筛选组件----------------------
+col1, col2 = st.columns([1,1])
+with col1:
+    start_date, end_date = st.date_input("选择时间范围", [df["日期"].min(), df["日期"].max()])
+with col2:
+    place_list = df["产地"].unique()
+    select_place = st.multiselect("选择产地", place_list, default=place_list)
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
+# 筛选数据
+filter_df = df[(df["日期"] >= pd.to_datetime(start_date)) &
+               (df["日期"] <= pd.to_datetime(end_date)) &
+               (df["产地"].isin(select_place))]
 
-''
-''
+# ----------------------指标卡片----------------------
+st.divider()
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("平均价均值", round(filter_df["平均价"].mean(),3))
+c2.metric("最低价格", filter_df["最低价"].min())
+c3.metric("最高价格", filter_df["最高价"].max())
+c4.metric("数据条数", len(filter_df))
 
+# ----------------------图表1：价格趋势折线图----------------------
+st.subheader("📈 土豆价格随时间变化趋势")
+fig_line = px.line(filter_df, x="日期", y=["最低价","平均价","最高价"], color="产地",
+                   markers=True, title="土豆每日价格走势")
+st.plotly_chart(fig_line, use_container_width=True)
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+# ----------------------图表2：产地平均价对比柱状图----------------------
+st.subheader("📊 不同产地土豆平均价对比")
+bar_df = filter_df.groupby("产地")["平均价"].mean().reset_index()
+fig_bar = px.bar(bar_df, x="产地", y="平均价", color="产地", title="各产地土豆均价")
+st.plotly_chart(fig_bar, use_container_width=True)
 
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+# ----------------------原始数据表----------------------
+st.subheader("📋 原始明细数据")
+st.dataframe(filter_df, use_container_width=True)

@@ -142,7 +142,7 @@ else:
 
 # ========== 如果直接运行脚本，控制台打印原始数据 ==========
 if __name__ == "__main__":
-    raw_df = load_data(3)
+    raw_df = load_data(100)
     print("序号\t一级分类\t品名\t最低价\t平均价\t最高价\t规格\t产地\t单位\t发布日期")
     for idx, row in raw_df.iterrows():
         print(

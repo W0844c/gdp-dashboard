@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
+import time
 
 st.set_page_config(page_title="新发地土豆价格看板", layout="wide")
 
@@ -35,6 +36,7 @@ def load_data(max_page: int = 100):
     for page in range(1, max_page + 1):
         res_json = fetch_tato_price(page)
         if res_json is None:
+            time.sleep(0.3)
             continue
         item_list = res_json.get("list", [])
         if not item_list:
@@ -55,31 +57,12 @@ def load_data(max_page: int = 100):
                 "单位": item.get("unitInfo", "-") or "-",
                 "发布日期": item.get("pubDate", "-") or "-"
             })
+        time.sleep(0.3)
     df = pd.DataFrame(data_list)
     df = df[df["品名"] == "土豆"]
     df = df.dropna(subset=["最低价", "平均价", "最高价"])
     df["发布日期"] = pd.to_datetime(df["发布日期"], errors="coerce")
     df = df.dropna(subset=["发布日期"])
-
-    # 按【产地 + 日期】分组，同一天多条记录，取当日均值
-    df = df.groupby(["产地", pd.Grouper(key="发布日期", freq="D")]).agg({
-        "最低价": "mean",
-        "平均价": "mean",
-        "最高价": "mean"
-    }).reset_index()
-
-    full_all = []
-    for place in df["产地"].unique():
-        sub = df[df["产地"] == place]
-        min_d = sub["发布日期"].min()
-        max_d = pd.to_datetime(datetime.now().date())
-        full_range = pd.date_range(start=min_d, end=max_d, freq="D")
-        sub = sub.set_index("发布日期").reindex(full_range).reset_index()
-        sub.rename(columns={"index": "发布日期"}, inplace=True)
-        sub["产地"] = place
-        full_all.append(sub)
-    df = pd.concat(full_all, ignore_index=True)
-
     return df
 
 # ========== Streamlit 主界面 ==========
@@ -112,9 +95,9 @@ else:
     ]
 
     st.divider()
-    c1, c2, c3, c4 = st.columns(4)
     valid_df = filter_df.dropna(subset=["平均价"])
     if not valid_df.empty:
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("土豆均价均值", round(valid_df["平均价"].mean(), 3))
         c2.metric("土豆最低价格", valid_df["最低价"].min())
         c3.metric("土豆最高价格", valid_df["最高价"].max())
@@ -122,37 +105,46 @@ else:
     else:
         st.warning("所选时间段没有有效价格数据！")
 
-    st.subheader("📈 土豆价格随时间变化趋势")
+    st.subheader("📈 土豆价格随时间变化趋势（总体）")
+    # 按日期聚合：当日全部选中产地的整体最低、平均、最高
+    daily_agg = valid_df.groupby("发布日期").agg({
+        "最低价": "min",
+        "平均价": "mean",
+        "最高价": "max"
+    }).reset_index()
+
+    # 生成连续日期，补齐直到今天
+    d_start = daily_agg["发布日期"].min()
+    d_end = pd.to_datetime(datetime.now().date())
+    full_dates = pd.date_range(d_start, d_end, freq="D")
+    daily_agg = daily_agg.set_index("发布日期").reindex(full_dates).reset_index()
+    daily_agg.rename(columns={"index": "发布日期"}, inplace=True)
+
     fig_line = go.Figure()
-    for place in sorted(filter_df["产地"].unique()):
-        sub_df = filter_df[filter_df["产地"] == place].sort_values("发布日期")
-        fig_line.add_trace(go.Scatter(
-            x=sub_df["发布日期"],
-            y=sub_df["最低价"],
-            mode="lines+markers",
-            name=f"{place}-最低价",
-            line_shape="linear",
-            line_dash="dash",
-            connectgaps=False
-        ))
-        fig_line.add_trace(go.Scatter(
-            x=sub_df["发布日期"],
-            y=sub_df["平均价"],
-            mode="lines+markers",
-            name=f"{place}-平均价",
-            line_shape="linear",
-            connectgaps=False
-        ))
-        fig_line.add_trace(go.Scatter(
-            x=sub_df["发布日期"],
-            y=sub_df["最高价"],
-            mode="lines+markers",
-            name=f"{place}-最高价",
-            line_shape="linear",
-            line_dash="dash",
-            connectgaps=False
-        ))
-    fig_line.update_layout(title="土豆每日价格走势", height=450)
+    fig_line.add_trace(go.Scatter(
+        x=daily_agg["发布日期"],
+        y=daily_agg["最低价"],
+        mode="lines+markers",
+        name="总体最低价",
+        line_dash="dash",
+        connectgaps=False
+    ))
+    fig_line.add_trace(go.Scatter(
+        x=daily_agg["发布日期"],
+        y=daily_agg["平均价"],
+        mode="lines+markers",
+        name="总体平均价",
+        connectgaps=False
+    ))
+    fig_line.add_trace(go.Scatter(
+        x=daily_agg["发布日期"],
+        y=daily_agg["最高价"],
+        mode="lines+markers",
+        name="总体最高价",
+        line_dash="dash",
+        connectgaps=False
+    ))
+    fig_line.update_layout(title="土豆每日总体价格走势", height=450)
     fig_line.update_xaxes(tickformat="%Y-%m-%d")
     st.plotly_chart(fig_line, use_container_width=True)
 
@@ -187,4 +179,3 @@ if __name__ == "__main__":
             "-",
             row["发布日期"]
         )
-

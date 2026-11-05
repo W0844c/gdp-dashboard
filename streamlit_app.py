@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+from datetime import datetime
 
 st.set_page_config(page_title="新发地土豆价格看板", layout="wide")
 
@@ -37,6 +38,7 @@ def load_data(max_page: int = 100):
             continue
         item_list = res_json.get("list", [])
         if not item_list:
+            st.info(f"爬到第 {page} 页，数据源已经没有更多数据，提前停止翻页")
             break
         for item in item_list:
             low = item.get("lowPrice")
@@ -58,13 +60,33 @@ def load_data(max_page: int = 100):
     df = df.dropna(subset=["最低价", "平均价", "最高价"])
     df["发布日期"] = pd.to_datetime(df["发布日期"], errors="coerce")
     df = df.dropna(subset=["发布日期"])
+
+    # 按【产地 + 日期】分组，同一天多条记录，取当日均值
+    df = df.groupby(["产地", pd.Grouper(key="发布日期", freq="D")]).agg({
+        "最低价": "mean",
+        "平均价": "mean",
+        "最高价": "mean"
+    }).reset_index()
+
+    full_all = []
+    for place in df["产地"].unique():
+        sub = df[df["产地"] == place]
+        min_d = sub["发布日期"].min()
+        max_d = pd.to_datetime(datetime.now().date())
+        full_range = pd.date_range(start=min_d, end=max_d, freq="D")
+        sub = sub.set_index("发布日期").reindex(full_range).reset_index()
+        sub.rename(columns={"index": "发布日期"}, inplace=True)
+        sub["产地"] = place
+        full_all.append(sub)
+    df = pd.concat(full_all, ignore_index=True)
+
     return df
 
 # ========== Streamlit 主界面 ==========
 st.title("🥔 新发地土豆价格监控看板")
 
 with st.spinner("正在爬取新发地数据……"):
-    df = load_data(max_page=3)
+    df = load_data(max_page=100)
 
 if df.empty:
     st.error("没有获取到土豆价格数据，请稍后重试！")
@@ -91,10 +113,14 @@ else:
 
     st.divider()
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("土豆均价均值", round(filter_df["平均价"].mean(), 3))
-    c2.metric("土豆最低价格", filter_df["最低价"].min())
-    c3.metric("土豆最高价格", filter_df["最高价"].max())
-    c4.metric("土豆数据条数", len(filter_df))
+    valid_df = filter_df.dropna(subset=["平均价"])
+    if not valid_df.empty:
+        c1.metric("土豆均价均值", round(valid_df["平均价"].mean(), 3))
+        c2.metric("土豆最低价格", valid_df["最低价"].min())
+        c3.metric("土豆最高价格", valid_df["最高价"].max())
+        c4.metric("土豆数据条数", len(valid_df))
+    else:
+        st.warning("所选时间段没有有效价格数据！")
 
     st.subheader("📈 土豆价格随时间变化趋势")
     fig_line = go.Figure()
@@ -106,14 +132,16 @@ else:
             mode="lines+markers",
             name=f"{place}-最低价",
             line_shape="linear",
-            line_dash="dash"
+            line_dash="dash",
+            connectgaps=False
         ))
         fig_line.add_trace(go.Scatter(
             x=sub_df["发布日期"],
             y=sub_df["平均价"],
             mode="lines+markers",
             name=f"{place}-平均价",
-            line_shape="linear"
+            line_shape="linear",
+            connectgaps=False
         ))
         fig_line.add_trace(go.Scatter(
             x=sub_df["发布日期"],
@@ -121,14 +149,15 @@ else:
             mode="lines+markers",
             name=f"{place}-最高价",
             line_shape="linear",
-            line_dash="dash"
+            line_dash="dash",
+            connectgaps=False
         ))
     fig_line.update_layout(title="土豆每日价格走势", height=450)
     fig_line.update_xaxes(tickformat="%Y-%m-%d")
     st.plotly_chart(fig_line, use_container_width=True)
 
     st.subheader("📊 不同产地土豆平均价对比")
-    bar_df = filter_df.groupby("产地")["平均价"].mean().reset_index()
+    bar_df = valid_df.groupby("产地")["平均价"].mean().reset_index()
     fig_bar = go.Figure(go.Bar(
         x=bar_df["产地"],
         y=bar_df["平均价"],
@@ -144,17 +173,18 @@ else:
 if __name__ == "__main__":
     raw_df = load_data(100)
     print("序号\t一级分类\t品名\t最低价\t平均价\t最高价\t规格\t产地\t单位\t发布日期")
-    for idx, row in raw_df.iterrows():
+    show_df = raw_df.dropna(subset=["平均价"])
+    for idx, row in show_df.iterrows():
         print(
             idx + 1,
-            row["一级分类"],
-            row["品名"],
+            row["产地"],
+            "土豆",
             row["最低价"],
             row["平均价"],
             row["最高价"],
-            row["规格"],
+            "-",
             row["产地"],
-            row["单位"],
+            "-",
             row["发布日期"]
         )
 

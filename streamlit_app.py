@@ -29,7 +29,7 @@ def fetch_tato_price(page: int, keyword: str = "土豆", start_time: str = "2024
         return None
 
 @st.cache_data(ttl=3600)
-def load_data(max_page: int = 3):
+def load_data(max_page: int = 100):
     data_list = []
     for page in range(1, max_page + 1):
         res_json = fetch_tato_price(page)

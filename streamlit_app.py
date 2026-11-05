@@ -120,26 +120,33 @@ else:
     daily_agg = daily_agg.set_index("发布日期").reindex(full_dates).reset_index()
     daily_agg.rename(columns={"index": "发布日期"}, inplace=True)
 
-    # 使用 Stair 阶梯图（直角折线，兼容性更好）
     fig_line = go.Figure()
-    fig_line.add_trace(go.Stair(
+    fig_line.add_trace(go.Scatter(
         x=daily_agg["发布日期"],
         y=daily_agg["最低价"],
+        mode="lines",
         name="总体最低价",
-        line=dict(dash="dash")
+        line_dash="dash",
+        connectgaps=False,
+        shape="hv"
     ))
-    fig_line.add_trace(go.Stair(
+    fig_line.add_trace(go.Scatter(
         x=daily_agg["发布日期"],
         y=daily_agg["平均价"],
-        name="总体平均价"
+        mode="lines",
+        name="总体平均价",
+        connectgaps=False,
+        shape="hv"
     ))
-    fig_line.add_trace(go.Stair(
+    fig_line.add_trace(go.Scatter(
         x=daily_agg["发布日期"],
         y=daily_agg["最高价"],
+        mode="lines",
         name="总体最高价",
-        line=dict(dash="dash")
+        line_dash="dash",
+        connectgaps=False,
+        shape="hv"
     ))
-
     fig_line.update_layout(
         title="土豆每日总体价格走势",
         height=450,
